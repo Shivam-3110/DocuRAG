@@ -15,9 +15,12 @@ app.post('/upload',upload.single('pdf'),async (req,res)=>{
     const dataBuffer = fs.readFileSync(req.file.path);
     const pdfData = await pdfParse(dataBuffer);
     const text = pdfData.text;
-        res.send({text});
+    const chunks = text.split('\n\n');
+    res.json({
+        totalChunks:chunks.length,
+        chunks:chunks
+    })
 })
-
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
 });
