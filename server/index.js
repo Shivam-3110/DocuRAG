@@ -8,21 +8,19 @@ const {GoogleGenAI} = require('@google/genai');
 const upload = multer({ dest: 'Uploads/' });
 require('dotenv').config();
 const ai = new GoogleGenAI(process.env.GEMINI_API_KEY);
+const {QdrantClient} = require('@qdrant/js-client-rest');
 
-function cosineSimilarity(vecA, vecB) {
-    let dotProduct = 0;
-    for (let i = 0; i < vecA.length; i++) {
-        dotProduct += vecA[i] * vecB[i];
-    }
-    return dotProduct ;
-}
+const qdrant = new QdrantClient({
+    url: process.env.QUADRANT_URL,
+    apiKey: process.env.QUADRANT_API_KEY
+});
 
 async function createEmbedding(text) {
     const response = await ai.models.embedContent({
         model: "gemini-embedding-2",
         contents: text,
         config: {
-            outputDimensionality: 768
+            outputDimensionality: 3072
         }
     });
 
@@ -32,6 +30,23 @@ async function createEmbedding(text) {
 app.get("/",(req,res)=>{
     res.send("server is running");
 })
+
+app.get("/create-collection", async (req, res) => {
+    try {
+         await qdrant.createCollection('pdf-docs',{
+            vectors: {
+                size:3072,
+                distance: 'Cosine'
+            }
+        });
+        res.send('Collection created successfully');
+    }
+    catch(e){
+        console.error('Error fetching collections:', e);
+        res.status(500).send('Error fetching collections');
+    }
+})
+
 
 app.post('/upload',upload.single('pdf'),async (req,res)=>{
         console.log(req.file);
@@ -50,20 +65,29 @@ app.post('/upload',upload.single('pdf'),async (req,res)=>{
             embedding: embedding
         });
     }
+    
+    const points = chunkEmbeddings.map((item, index) => ({
+        id: index+1,
+        vector: item.embedding,
+        payload: { text: item.text }
+    }));
+     
+    await qdrant.upsert('pdf-docs', {
+    wait: true,
+    points: points
+});
 
     const question = req.body.question;
     const questionEmbedding = await createEmbedding(question);
 
-    let bestChunk = null;
-    let bestScore = -Infinity;
-    for(const items of chunkEmbeddings){
-        const score = cosineSimilarity(questionEmbedding, items.embedding);
-        if(score > bestScore){
-            bestScore = score;
-            bestChunk = items.text;
-        }
-    }
-    console.log(bestScore);
+     const searchResult = await qdrant.query('pdf-docs', {
+        vector: questionEmbedding,
+        limit: 1,
+        with_payload: true
+    });  
+     console.log(searchResult);
+    const bestChunk = searchResult.points[0].payload.text;
+    console.log(bestChunk);
 
     const response = await ai.models.generateContent({
         model: 'gemini-3.5-flash-lite',
