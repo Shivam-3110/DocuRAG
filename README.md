@@ -1,4 +1,4 @@
-# 📄 Chat With PDF — RAG Application
+# 📄 DocuRAG — RAG Application
 
 A **Retrieval-Augmented Generation (RAG)** application that allows users to upload a PDF, ask questions about its content, and receive answers generated using the relevant information retrieved from the document.
 
