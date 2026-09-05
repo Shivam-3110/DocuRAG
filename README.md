@@ -98,22 +98,6 @@ The application:
 * 🤖 Gemini-powered answer generation
 * ⚡ Node.js + Express backend
 
-### Planned Improvements
-
-* [ ] Support multiple PDFs without mixing document contexts
-* [ ] Generate unique IDs for Qdrant points
-* [ ] Retrieve multiple relevant chunks instead of only one
-* [ ] Improve chunking strategy with overlap
-* [ ] Add document IDs and metadata
-* [ ] Separate PDF ingestion and question-answering endpoints
-* [ ] Add source/page references
-* [ ] Improve error handling and validation
-* [ ] Add conversation history
-* [ ] Build a complete frontend
-* [ ] Deploy the application
-
----
-
 ## 🛠️ Tech Stack
 
 | Technology        | Purpose                          |
