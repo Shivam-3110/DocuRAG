@@ -9,28 +9,51 @@ const qdrant = new QdrantClient({
 });
 
 let documentIdIndexReady = false;
+let documentHashIndexReady = false;
 
-async function ensureDocumentIdPayloadIndex() {
-    if (documentIdIndexReady) {
+async function ensurePayloadIndex(fieldName, fieldSchema) {
+    if (fieldName === 'documentId' && documentIdIndexReady) {
+        return;
+    }
+
+    if (fieldName === 'documentHash' && documentHashIndexReady) {
         return;
     }
 
     try {
         await qdrant.createPayloadIndex(COLLECTION_NAME, {
-            field_name: 'documentId',
-            field_schema: 'uuid',
+            field_name: fieldName,
+            field_schema: fieldSchema,
             wait: true
         });
-        documentIdIndexReady = true;
+        if (fieldName === 'documentId') {
+            documentIdIndexReady = true;
+        }
+        if (fieldName === 'documentHash') {
+            documentHashIndexReady = true;
+        }
     } catch (error) {
         const message = error?.data?.status?.error || error.message || '';
         if (message.toLowerCase().includes('already exists')) {
-            documentIdIndexReady = true;
+            if (fieldName === 'documentId') {
+                documentIdIndexReady = true;
+            }
+            if (fieldName === 'documentHash') {
+                documentHashIndexReady = true;
+            }
             return;
         }
 
         throw error;
     }
+}
+
+async function ensureDocumentIdPayloadIndex() {
+    await ensurePayloadIndex('documentId', 'uuid');
+}
+
+async function ensureDocumentHashPayloadIndex() {
+    await ensurePayloadIndex('documentHash', 'keyword');
 }
 
 async function createCollectionIfNeeded() {
@@ -49,15 +72,39 @@ async function createCollectionIfNeeded() {
     }
 
     await ensureDocumentIdPayloadIndex();
+    await ensureDocumentHashPayloadIndex();
 }
 
-async function upsertDocumentChunks(documentId, chunkEmbeddings) {
+async function findDocumentByHash(documentHash) {
+    await createCollectionIfNeeded();
+
+    const existingDocument = await qdrant.scroll(COLLECTION_NAME, {
+        filter: {
+            must: [
+                {
+                    key: 'documentHash',
+                    match: {
+                        value: documentHash
+                    }
+                }
+            ]
+        },
+        limit: 1,
+        with_payload: true
+    });
+
+    const existingPoint = existingDocument.points && existingDocument.points[0];
+    return existingPoint ? existingPoint.payload : null;
+}
+
+async function upsertDocumentChunks(documentId, documentHash, chunkEmbeddings) {
     const points = chunkEmbeddings.map((item) => ({
         id: randomUUID(),
         vector: item.embedding,
         payload: {
             text: item.text,
-            documentId: documentId
+            documentId: documentId,
+            documentHash: documentHash
         }
     }));
 
@@ -89,6 +136,7 @@ async function searchDocumentChunks(documentId, questionEmbedding) {
 
 module.exports = {
     createCollectionIfNeeded,
+    findDocumentByHash,
     searchDocumentChunks,
     upsertDocumentChunks
 };
